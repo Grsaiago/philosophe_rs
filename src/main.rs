@@ -46,6 +46,14 @@ struct Philosopher {
     barrier: Arc<Barrier>,
 }
 
+#[derive(Debug)]
+struct Observer {
+    time_to_die: Duration,
+    philos_last_eaten: Box<[Arc<Mutex<Option<Instant>>>]>,
+    execution_state: Arc<RwLock<ExecutionState>>,
+    barrier: Arc<Barrier>,
+}
+
 #[derive(Debug, PartialEq)]
 pub enum ExecutionState {
     Stop,
@@ -227,7 +235,8 @@ impl Controller {
             forks,
             execution_state: Arc::new(RwLock::new(ExecutionState::Continue)),
             last_eaten: (0..n_philos).map(|_| Arc::new(Mutex::new(None))).collect(),
-            barrier: Arc::new(Barrier::new(n_philos as usize)),
+            barrier: Arc::new(Barrier::new(n_philos as usize + 1)),
+            //barrier: Arc::new(Barrier::new(n_philos as usize)),
         }
     }
 
@@ -272,8 +281,37 @@ impl Controller {
 
 fn main() {
     let controller = Controller::new();
+    let observer = Observer {
+        time_to_die: controller.time_to_die,
+        execution_state: controller.execution_state.clone(),
+        philos_last_eaten: controller.last_eaten.clone(),
+        barrier: controller.barrier.clone(),
+    };
 
     thread::scope(|scope| {
+        // spawn observer
+        scope.spawn(move || {
+            // await on barrier
+            observer.barrier.wait();
+            // run logic
+            for (idx, philo_last_eaten) in observer.philos_last_eaten.iter().enumerate().cycle() {
+                if let Some(last_eaten) = *philo_last_eaten.lock().expect("Error on lock") {
+                    if Instant::now() - last_eaten > observer.time_to_die {
+                        {
+                            let mut lock = observer.execution_state.write().expect("Error on lock");
+                            *lock = ExecutionState::Stop;
+                        }
+                        let timestamp = time::SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis();
+                        println!("[{}] philo {} died", timestamp, idx);
+                        return;
+                    }
+                }
+            }
+        });
+        // create and run philos
         for iteration in 0..controller.n_philos {
             let mut philo = controller.create_philo(iteration + 1);
             scope.spawn(move || {
