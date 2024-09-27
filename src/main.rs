@@ -65,7 +65,7 @@ pub enum PhiloAction {
     TakeFork(u64),
 }
 
-pub fn print_action(action: PhiloAction) -> () {
+pub fn print_action(action: PhiloAction) {
     let timestamp = time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -155,7 +155,7 @@ impl Philosopher {
                 }
             }
         }
-        return ExecutionState::Continue;
+        ExecutionState::Continue
     }
 
     fn eat(&mut self) -> ExecutionState {
@@ -188,12 +188,12 @@ impl Philosopher {
                 return ExecutionState::Stop;
             }
         }
-        return ExecutionState::Continue;
+        ExecutionState::Continue
     }
 
     fn sleep(&self) -> ExecutionState {
         print_action(PhiloAction::Sleep(self.id as u64));
-        return self.smart_sleep(self.time_to_sleep);
+        self.smart_sleep(self.time_to_sleep)
     }
 
     fn smart_sleep(&self, time: Duration) -> ExecutionState {
@@ -209,7 +209,7 @@ impl Philosopher {
             }
             thread::sleep(time / 10);
         }
-        return ExecutionState::Continue;
+        ExecutionState::Continue
     }
 }
 
@@ -248,8 +248,8 @@ impl Controller {
                     .get(id as usize - 1)
                     .expect("create_philos Arc::clone()"),
             ),
-            rfork: if id as u32 == self.n_philos {
-                Arc::clone(self.forks.get(0).expect("create_philos Arc::clone()"))
+            rfork: if id == self.n_philos {
+                Arc::clone(self.forks.first().expect("create_philos Arc::clone()"))
             } else {
                 Arc::clone(
                     self.forks
@@ -259,14 +259,12 @@ impl Controller {
             },
             time_to_eat: self.time_to_eat,
             time_to_sleep: self.time_to_sleep,
-            eat_control: self.total_eat.and_then(|eat_max| {
-                Some(EatControl {
-                    max: eat_max,
-                    count: 0,
-                })
+            eat_control: self.total_eat.map(|eat_max| EatControl {
+                max: eat_max,
+                count: 0,
             }),
             execution_state: self.execution_state.clone(),
-            last_eaten: Arc::clone(&self.last_eaten.get(id as usize - 1).expect("Error")),
+            last_eaten: self.last_eaten.get(id as usize - 1).expect("Error").clone(),
             barrier: self.barrier.clone(),
         }
     }
